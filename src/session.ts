@@ -1,9 +1,9 @@
-import type { Card } from './cards';
+import type { Question } from './questions';
 
 export interface QuizSession {
-  cards: Card[];
+  questions: Question[];
   queue: string[];
-  revealed: boolean;
+  selectedAnswer: string | null;
   attempts: number;
   mastered: Set<string>;
   missed: Set<string>;
@@ -11,41 +11,50 @@ export interface QuizSession {
   stoppedEarly: boolean;
 }
 
-export function startSession(cards: Card[]): QuizSession {
-  if (!cards.length) throw new Error('Cannot start a session without cards.');
+export function startSession(questions: Question[]): QuizSession {
+  if (!questions.length) throw new Error('Cannot start a session without four-option questions.');
   return {
-    cards, queue: cards.map((card) => card.id), revealed: false,
+    questions, queue: questions.map((question) => question.id), selectedAnswer: null,
     attempts: 0, mastered: new Set(), missed: new Set(), finished: false, stoppedEarly: false,
   };
 }
 
-export function currentCard(session: QuizSession): Card | undefined {
-  return session.cards.find((card) => card.id === session.queue[0]);
+export function currentQuestion(session: QuizSession): Question | undefined {
+  return session.questions.find((question) => question.id === session.queue[0]);
 }
 
-export function reveal(session: QuizSession): QuizSession {
-  if (session.finished || !session.queue.length) throw new Error('No card to reveal.');
-  return { ...session, revealed: true };
-}
-
-export function grade(session: QuizSession, knewIt: boolean): QuizSession {
-  if (session.finished || !session.revealed || !session.queue.length) {
-    throw new Error('Reveal the answer before grading.');
+export function selectAnswer(session: QuizSession, answer: string): QuizSession {
+  const question = currentQuestion(session);
+  if (session.finished || !question || session.selectedAnswer !== null) {
+    throw new Error('This question cannot be answered again.');
   }
-  const [id, ...rest] = session.queue;
+  if (!question.choices.includes(answer)) throw new Error('Choose one of the four answers.');
+
   const mastered = new Set(session.mastered);
   const missed = new Set(session.missed);
-  if (knewIt) mastered.add(id);
+  const queue = [...session.queue];
+  if (answer === question.answer) mastered.add(question.id);
   else {
-    missed.add(id);
-    rest.push(id);
+    missed.add(question.id);
+    queue.push(question.id);
   }
   return {
-    ...session, queue: rest, revealed: false, attempts: session.attempts + 1,
-    mastered, missed, finished: rest.length === 0,
+    ...session, queue, selectedAnswer: answer, attempts: session.attempts + 1,
+    mastered, missed,
   };
 }
 
+export function continueSession(session: QuizSession): QuizSession {
+  if (session.finished || session.selectedAnswer === null) {
+    throw new Error('Choose an answer before continuing.');
+  }
+  const queue = session.queue.slice(1);
+  return { ...session, queue, selectedAnswer: null, finished: queue.length === 0 };
+}
+
 export function finishSession(session: QuizSession): QuizSession {
-  return { ...session, queue: [], revealed: false, finished: true, stoppedEarly: session.queue.length > 0 };
+  const remaining = session.queue.length - (session.selectedAnswer === null ? 0 : 1);
+  return {
+    ...session, queue: [], selectedAnswer: null, finished: true, stoppedEarly: remaining > 0,
+  };
 }
