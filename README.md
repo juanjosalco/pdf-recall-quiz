@@ -2,6 +2,8 @@
 
 A free, static browser app that turns **selectable-text PDFs** into fill-in-the-blank recall cards. Each card hides an exact phrase from a source sentence, cites its PDF page, and reveals the original passage. Mark **Knew it** or **Review again**; missed cards return later in the same session. End the session to see how many cards you knew, still need to review, and how many attempts you made.
 
+Choose one PDF with the file picker or drag and drop it anywhere on the page. Non-PDF files and multi-file drops show an error without replacing the current practice session.
+
 **Try it:** https://juanjosalco.github.io/pdf-recall-quiz/
 
 ## Privacy and scope
