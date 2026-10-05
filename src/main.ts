@@ -3,6 +3,7 @@ import { generateCards } from './cards';
 import { extractPdf, MAX_FILE_BYTES, MAX_PAGES } from './pdf';
 import { currentCard, finishSession, grade, reveal, startSession } from './session';
 import type { QuizSession } from './session';
+import { selectPdf } from './upload';
 
 const root = document.querySelector<HTMLDivElement>('#app');
 if (!root) throw new Error('Missing app root.');
@@ -26,7 +27,7 @@ root.innerHTML = `
           <div class="upload-icon" aria-hidden="true">↗</div>
           <div class="upload-copy">
             <h2>Start with a PDF</h2>
-            <p>Choose a file with selectable text. Nothing is uploaded or saved.</p>
+            <p>Choose a selectable-text PDF, or drop one anywhere on this page. Nothing is uploaded or saved.</p>
           </div>
           <label class="file-button" for="pdf-file">Choose PDF <span aria-hidden="true">→</span></label>
           <input id="pdf-file" class="visually-hidden" type="file" accept="application/pdf,.pdf" aria-describedby="limits" />
@@ -78,6 +79,7 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 
 const input = element<HTMLInputElement>('#pdf-file');
+const uploadCard = element<HTMLDivElement>('.upload-card');
 const status = element<HTMLDivElement>('#status');
 const quiz = element<HTMLElement>('#quiz');
 const summary = element<HTMLElement>('#summary');
@@ -124,9 +126,11 @@ function render(): void {
   }
 }
 
-input.addEventListener('change', async () => {
-  const file = input.files?.[0];
-  if (!file) return;
+async function loadPdf(file: File): Promise<void> {
+  if (input.disabled) {
+    setStatus('Please wait until the current PDF finishes processing.', true);
+    return;
+  }
   quiz.hidden = true;
   summary.hidden = true;
   session = undefined;
@@ -156,6 +160,51 @@ input.addEventListener('change', async () => {
   } finally {
     input.disabled = false;
     input.value = '';
+  }
+}
+
+function showSelectionError(error: unknown): void {
+  setStatus(error instanceof Error ? error.message : 'Could not select this PDF.', true);
+}
+
+input.addEventListener('change', () => {
+  if (!input.files?.length) return;
+  try {
+    void loadPdf(selectPdf(input.files));
+  } catch (error) {
+    showSelectionError(error);
+    input.value = '';
+  }
+});
+
+let dragDepth = 0;
+document.addEventListener('dragenter', (event) => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  dragDepth++;
+  if (!input.disabled) uploadCard.classList.add('is-dragging');
+});
+document.addEventListener('dragover', (event) => {
+  if (event.dataTransfer?.types.includes('Files')) event.preventDefault();
+});
+document.addEventListener('dragleave', () => {
+  if (dragDepth === 0) return;
+  dragDepth--;
+  if (dragDepth === 0) uploadCard.classList.remove('is-dragging');
+});
+document.addEventListener('drop', (event) => {
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  event.preventDefault();
+  dragDepth = 0;
+  uploadCard.classList.remove('is-dragging');
+  if (input.disabled) {
+    setStatus('Please wait until the current PDF finishes processing.', true);
+    return;
+  }
+  try {
+    void loadPdf(selectPdf(event.dataTransfer.files));
+  } catch (error) {
+    showSelectionError(error);
   }
 });
 
