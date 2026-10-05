@@ -1,34 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import type { Card } from './cards';
-import { currentCard, finishSession, grade, reveal, startSession } from './session';
+import type { Question } from './questions';
+import { continueSession, currentQuestion, finishSession, selectAnswer, startSession } from './session';
 
-const cards: Card[] = [1, 2].map((n) => ({
-  id: String(n), page: n, excerpt: `Example ${n}`, answer: 'answer',
-  before: 'Before ', after: ' after.',
+const questions: Question[] = [1, 2].map((n) => ({
+  id: String(n), page: n, excerpt: `Example ${n} is correct.`,
+  answer: 'correct', before: `Example ${n} is `, after: '.',
+  choices: ['wrong A', 'correct', 'wrong B', 'wrong C'],
 }));
 
-describe('recall session', () => {
-  it('requires reveal, retries missed cards, and counts completion correctly', () => {
-    let session = startSession(cards);
-    expect(() => grade(session, true)).toThrow('Reveal');
-    session = grade(reveal(session), false);
-    expect(currentCard(session)?.id).toBe('2');
+describe('multiple-choice session', () => {
+  it('requires a choice, shows feedback once, retries incorrect answers and counts completion', () => {
+    let session = startSession(questions);
+    expect(() => continueSession(session)).toThrow('Choose an answer');
+    expect(() => selectAnswer(session, 'not a choice')).toThrow('four answers');
+    session = selectAnswer(session, 'wrong A');
+    expect(session.selectedAnswer).toBe('wrong A');
+    expect(session.attempts).toBe(1);
+    expect(() => selectAnswer(session, 'correct')).toThrow('cannot be answered again');
+    session = continueSession(session);
+    expect(currentQuestion(session)?.id).toBe('2');
     expect(session.queue).toEqual(['2', '1']);
-    session = grade(reveal(session), true);
-    expect(currentCard(session)?.id).toBe('1');
-    session = grade(reveal(session), true);
+    session = continueSession(selectAnswer(session, 'correct'));
+    expect(currentQuestion(session)?.id).toBe('1');
+    session = continueSession(selectAnswer(session, 'correct'));
     expect(session.finished).toBe(true);
     expect(session.attempts).toBe(3);
     expect(session.mastered.size).toBe(2);
     expect(session.missed.size).toBe(1);
-    expect(() => reveal(session)).toThrow('No card');
+    expect(() => selectAnswer(session, 'correct')).toThrow('cannot be answered again');
   });
 
-  it('summarizes unfinished cards when ending early', () => {
-    const session = finishSession(grade(reveal(startSession(cards)), true));
+  it('summarizes answered and unanswered questions when ending early', () => {
+    const session = finishSession(selectAnswer(startSession(questions), 'correct'));
     expect(session.finished).toBe(true);
+    expect(session.stoppedEarly).toBe(true);
     expect(session.mastered.size).toBe(1);
-    expect(cards.length - session.mastered.size).toBe(1);
+    expect(questions.length - session.mastered.size).toBe(1);
     expect(session.queue).toEqual([]);
+    expect(finishSession(selectAnswer(startSession(questions.slice(0, 1)), 'correct')).stoppedEarly).toBe(false);
   });
 });

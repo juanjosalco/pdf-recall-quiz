@@ -3,6 +3,7 @@ import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { readFile } from 'node:fs/promises';
 import { extractPdf, MAX_FILE_BYTES, textLines } from './pdf';
 import { generateCards } from './cards';
+import { buildQuestions } from './questions';
 
 describe('PDF extraction', () => {
   it('reconstructs text lines and skips empty items', () => {
@@ -43,12 +44,22 @@ it.skipIf(!process.env.PDF_RECALL_SAMPLE)('extracts useful source-grounded cards
   const bytes = await readFile(process.env.PDF_RECALL_SAMPLE!);
   const result = await extractPdf(new Blob([new Uint8Array(bytes)]));
   const cards = generateCards(result.pages);
+  const questions = buildQuestions(cards);
   expect(result.textPageCount).toBeGreaterThan(10);
   expect(cards.length).toBeGreaterThanOrEqual(10);
+  expect(questions.length).toBeGreaterThanOrEqual(10);
   expect(new Set(cards.map((card) => card.page)).size).toBeGreaterThan(5);
   for (const card of cards) {
     expect(card.before + card.answer + card.after).toBe(card.excerpt);
     expect(result.pages[card.page - 1].lines.join(' ').replace(/\s+/g, ' ')).toContain(card.excerpt);
   }
-  console.info(`Sample PDF: ${result.pageCount} pages, ${result.textPageCount} text pages, ${cards.length} cards across ${new Set(cards.map((card) => card.page)).size} pages`);
+  for (const question of questions) {
+    expect(new Set(question.choices).size).toBe(4);
+    expect(question.choices.filter((choice) => choice === question.answer)).toHaveLength(1);
+    for (const wrong of question.choices.filter((choice) => choice !== question.answer)) {
+      expect(cards.some((card) => card.id !== question.id && card.answer === wrong && card.excerpt.includes(wrong))).toBe(true);
+      expect(question.excerpt.toLowerCase()).not.toContain(wrong.toLowerCase());
+    }
+  }
+  console.info(`Sample PDF: ${result.pageCount} pages, ${result.textPageCount} text pages, ${questions.length} four-choice questions across ${new Set(questions.map((question) => question.page)).size} pages`);
 });
